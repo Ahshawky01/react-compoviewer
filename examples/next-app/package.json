@@ -1,0 +1,21 @@
+{
+  "name": "compoviewer-next-example",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "dev:cv": "concurrently \"next dev\" \"compoviewer --watch\"",
+    "compoviewer": "compoviewer --watch"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-compoviewer": "file:../../"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.0.0",
+    "typescript": "^5.7.0"
+  }
+}
