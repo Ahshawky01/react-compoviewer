@@ -202,33 +202,70 @@ export default defineConfig({
 })
 ```
 
-### Wrapper Component
+### Wrapper Component (Context Providers)
 
-If your components need context providers (theme, auth, router, internationalization, etc.), create a wrapper component that the viewer will use around every preview:
+Most React apps use context providers (theme, auth, language, router, etc.). If you preview a component that depends on a provider, CompoViewer will automatically detect the missing provider and show you the exact fix:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Missing Provider                               │
+│                                                 │
+│  This component needs LanguageProvider to render │
+│                                                 │
+│  Fix: create a wrapper file and add it to your  │
+│  config:                                        │
+│                                                 │
+│  // compoviewer-wrapper.tsx                     │
+│  import { LanguageProvider } from '...'         │
+│  export default function Wrapper({ children }) {│
+│    return <LanguageProvider>{children}</...>     │
+│  }                                              │
+│                                                 │
+│  [Retry]  Click code blocks to copy             │
+└─────────────────────────────────────────────────┘
+```
+
+To fix this, create a wrapper file with all the providers your components need:
+
+#### Step 1: Create the wrapper
 
 ```tsx
 // src/compoviewer-wrapper.tsx
-import { ThemeProvider } from './theme'
-import { IntlProvider } from './i18n'
+import { ThemeProvider } from './shared/contexts/ThemeContext'
+import { LanguageProvider } from './shared/contexts/LanguageContext'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+
+const queryClient = new QueryClient()
 
 export default function Wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <IntlProvider locale="en">
-        {children}
-      </IntlProvider>
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
   )
 }
 ```
 
-Then reference it in your config:
+#### Step 2: Reference it in your config
 
 ```ts
-defineConfig({
+// compoviewer.config.ts
+import { defineConfig } from 'react-compoviewer'
+
+export default defineConfig({
   wrapper: './src/compoviewer-wrapper.tsx',
 })
 ```
+
+#### Step 3: Restart your dev server
+
+The wrapper applies to all previewed components. You only need to set this up once — after that, every component that needs those providers will work automatically.
+
+> **Tip:** If you see a "Missing Provider" error for a new provider later, just add it to your existing wrapper file. No config change needed.
 
 ---
 
@@ -300,8 +337,14 @@ No. The Vite plugin only runs in dev mode. The Next.js `<DevViewer />` component
 **Q: What components does it find?**
 Any PascalCase-named `export function`, `export const`, or `export default function` in files matching your `include` patterns. Hooks (`use*`), utilities, and non-PascalCase exports are skipped.
 
+**Q: A component shows "Missing Provider" — what do I do?**
+CompoViewer auto-detects this and shows the exact provider name plus copy-pasteable fix code. Create a wrapper file with the required providers and add `wrapper: './src/compoviewer-wrapper.tsx'` to your config. See the [Wrapper Component](#wrapper-component-context-providers) section for a full example.
+
 **Q: What if a component crashes in the preview?**
 An error boundary catches render errors and shows the error message with a "Retry" button. Your app is unaffected.
+
+**Q: My dev server is slow to start with CompoViewer — why?**
+By default, prop parsing is lazy — it only runs when you click a component, not at startup. If startup is still slow, narrow your `include` patterns to specific directories (e.g., `['src/components/**/*.tsx']` instead of `['src/**/*.tsx']`).
 
 **Q: Can I resize the panel?**
 Yes — drag the left edge of the panel to resize it. The width is constrained by `minWidth` and `maxWidth` in your config.
