@@ -1,6 +1,7 @@
 import path from 'path'
 import type { Plugin, ViteDevServer } from 'vite'
-import { buildRegistry } from './registry-builder.js'
+import { buildRegistryFast } from './registry-builder.js'
+import { parseProps, clearPropCache } from './parser.js'
 import type { RegistryData, ResolvedConfig } from '../types.js'
 import {
   VIRTUAL_MODULE_ID,
@@ -15,7 +16,7 @@ export function createVitePlugin(config: ResolvedConfig): Plugin {
   let registry: RegistryData = { components: [], timestamp: 0 }
 
   async function scan() {
-    registry = await buildRegistry(root, config)
+    registry = await buildRegistryFast(root, config)
   }
 
   function generateRegistryModule(): string {
@@ -31,7 +32,7 @@ export function createVitePlugin(config: ResolvedConfig): Plugin {
     filePath: ${JSON.stringify(c.filePath)},
     exportName: ${JSON.stringify(c.exportName)},
     exportType: ${JSON.stringify(c.exportType)},
-    props: ${JSON.stringify(c.props)},
+    props: [],
     load: ${importExpr},
   }`
     })
@@ -76,6 +77,29 @@ mountCompoViewer({ registry, config, Wrapper });
 
     configureServer(srv) {
       server = srv
+
+      srv.middlewares.use('/__compoviewer/props', (req, res) => {
+        const url = new URL(req.url ?? '', 'http://localhost')
+        const filePath = url.searchParams.get('file')
+        const exportName = url.searchParams.get('name')
+
+        if (!filePath || !exportName) {
+          res.statusCode = 400
+          res.end(JSON.stringify({ error: 'Missing file or name param' }))
+          return
+        }
+
+        const absPath = path.resolve(root, filePath)
+
+        try {
+          const props = parseProps(absPath, exportName)
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ props }))
+        } catch {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: 'Failed to parse props', props: [] }))
+        }
+      })
     },
 
     async buildStart() {
@@ -118,6 +142,7 @@ mountCompoViewer({ registry, config, Wrapper });
 
       if (!matchesInclude) return
 
+      clearPropCache(file)
       await scan()
 
       server?.ws?.send({

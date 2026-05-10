@@ -102,26 +102,57 @@ const docgenParser = withCompilerOptions(
   },
 )
 
+interface CacheEntry {
+  mtimeMs: number
+  props: Map<string, PropInfo[]>
+}
+
+const propCache = new Map<string, CacheEntry>()
+
 export function parseProps(filePath: string, exportName: string): PropInfo[] {
   try {
-    const docs = docgenParser.parse(filePath)
-    const doc = docs.find(
-      (d) => d.displayName === exportName || docs.length === 1,
-    )
-    if (!doc) return []
+    const stat = fs.statSync(filePath)
+    const cached = propCache.get(filePath)
 
-    return Object.entries(doc.props).map(([name, prop]) => {
-      const mapped = mapPropType(prop.type.name, prop.type.value)
-      return {
-        name,
-        type: mapped.type,
-        required: prop.required,
-        defaultValue: prop.defaultValue?.value,
-        ...(mapped.options ? { options: mapped.options } : {}),
-      }
-    })
+    if (cached && cached.mtimeMs === stat.mtimeMs) {
+      const cachedProps = cached.props.get(exportName)
+      if (cachedProps) return cachedProps
+    }
+
+    const docs = docgenParser.parse(filePath)
+
+    const entry: CacheEntry = {
+      mtimeMs: stat.mtimeMs,
+      props: new Map(),
+    }
+
+    for (const doc of docs) {
+      const props = Object.entries(doc.props).map(([name, prop]) => {
+        const mapped = mapPropType(prop.type.name, prop.type.value)
+        return {
+          name,
+          type: mapped.type,
+          required: prop.required,
+          defaultValue: prop.defaultValue?.value,
+          ...(mapped.options ? { options: mapped.options } : {}),
+        }
+      })
+      entry.props.set(doc.displayName, props)
+    }
+
+    propCache.set(filePath, entry)
+
+    return entry.props.get(exportName) ?? []
   } catch {
     return []
+  }
+}
+
+export function clearPropCache(filePath?: string) {
+  if (filePath) {
+    propCache.delete(filePath)
+  } else {
+    propCache.clear()
   }
 }
 

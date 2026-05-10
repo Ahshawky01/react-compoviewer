@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import type { ComponentEntry, PanelConfig } from '../../types.js'
+import type { ComponentEntry, PanelConfig, PropInfo } from '../../types.js'
 import { SearchBar } from './SearchBar.js'
 import { ComponentList } from './ComponentList.js'
 import { Preview } from './Preview.js'
@@ -14,6 +14,21 @@ interface OverlayProps {
   panelConfig: PanelConfig
 }
 
+async function fetchProps(
+  filePath: string,
+  exportName: string,
+): Promise<PropInfo[]> {
+  try {
+    const params = new URLSearchParams({ file: filePath, name: exportName })
+    const res = await fetch(`/__compoviewer/props?${params}`)
+    if (!res.ok) return []
+    const data = await res.json()
+    return data.props ?? []
+  } catch {
+    return []
+  }
+}
+
 export function Overlay({ isOpen, onClose, panelConfig }: OverlayProps) {
   const { Wrapper } = useRegistry()
   const [query, setQuery] = useState('')
@@ -22,6 +37,7 @@ export function Overlay({ isOpen, onClose, panelConfig }: OverlayProps) {
   const [selectedProps, setSelectedProps] = useState<
     ComponentEntry['props']
   >([])
+  const [propsLoading, setPropsLoading] = useState(false)
   const [propValues, setPropValues] = useState<Record<string, unknown>>({})
   const [focusIndex, setFocusIndex] = useState(0)
   const [panelWidth, setPanelWidth] = useState(panelConfig.defaultWidth)
@@ -43,16 +59,31 @@ export function Overlay({ isOpen, onClose, panelConfig }: OverlayProps) {
     (comp: ComponentEntry & { load: () => Promise<unknown> }) => {
       setSelectedName(comp.name)
       setSelectedFilePath(comp.filePath)
-      setSelectedProps(comp.props)
-
-      const defaults: Record<string, unknown> = {}
-      for (const p of comp.props) {
-        if (p.defaultValue !== undefined) defaults[p.name] = p.defaultValue
-      }
-      setPropValues(defaults)
 
       addRecent(comp.name)
       load(comp.name, comp.load as () => Promise<React.ComponentType<Record<string, unknown>>>)
+
+      if (comp.props.length > 0) {
+        setSelectedProps(comp.props)
+        const defaults: Record<string, unknown> = {}
+        for (const p of comp.props) {
+          if (p.defaultValue !== undefined) defaults[p.name] = p.defaultValue
+        }
+        setPropValues(defaults)
+      } else {
+        setSelectedProps([])
+        setPropValues({})
+        setPropsLoading(true)
+        fetchProps(comp.filePath, comp.exportName).then((props) => {
+          setSelectedProps(props)
+          const defaults: Record<string, unknown> = {}
+          for (const p of props) {
+            if (p.defaultValue !== undefined) defaults[p.name] = p.defaultValue
+          }
+          setPropValues(defaults)
+          setPropsLoading(false)
+        })
+      }
     },
     [addRecent, load],
   )
@@ -171,6 +202,7 @@ export function Overlay({ isOpen, onClose, panelConfig }: OverlayProps) {
                 values={propValues}
                 onChange={handlePropChange}
                 onReset={handlePropReset}
+                loading={propsLoading}
               />
             )}
           </div>

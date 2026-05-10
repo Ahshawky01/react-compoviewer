@@ -6,6 +6,7 @@ interface PropsEditorProps {
   values: Record<string, unknown>
   onChange: (name: string, value: unknown) => void
   onReset: () => void
+  loading?: boolean
 }
 
 export function PropsEditor({
@@ -13,7 +14,17 @@ export function PropsEditor({
   values,
   onChange,
   onReset,
+  loading,
 }: PropsEditorProps) {
+  if (loading) {
+    return (
+      <div className="cv-empty-props">
+        <div className="cv-spinner" style={{ width: 14, height: 14 }} />
+        <span style={{ marginLeft: 8 }}>Loading props...</span>
+      </div>
+    )
+  }
+
   if (props.length === 0) {
     return <div className="cv-empty-props">No editable props</div>
   }

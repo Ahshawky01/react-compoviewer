@@ -33,3 +33,34 @@ export async function buildRegistry(
     timestamp: Date.now(),
   }
 }
+
+export async function buildRegistryFast(
+  root: string,
+  config: ResolvedConfig,
+): Promise<RegistryData> {
+  const files = await scanFiles(root, config.include, config.exclude)
+  const components: ComponentEntry[] = []
+
+  for (const filePath of files) {
+    try {
+      const exports = await parseExports(filePath)
+
+      for (const exp of exports) {
+        components.push({
+          name: exp.name,
+          filePath: getRelativePath(root, filePath),
+          exportName: exp.name,
+          exportType: exp.exportType,
+          props: [],
+        })
+      }
+    } catch {
+      // Skip files that fail to parse
+    }
+  }
+
+  return {
+    components: components.sort((a, b) => a.name.localeCompare(b.name)),
+    timestamp: Date.now(),
+  }
+}
