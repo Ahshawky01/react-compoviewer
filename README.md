@@ -2,23 +2,33 @@
 
 Instantly preview any React component from your codebase in a side panel — no Storybook setup required.
 
-- Scans your project for all exported React components
+- Automatically scans your project for all exported React components
 - Keyboard shortcut opens a searchable overlay drawer
-- Live preview with auto-generated prop controls
-- HMR support — edits refresh the preview instantly
-- Works with Vite and Next.js
+- Live preview with auto-generated prop controls based on TypeScript types
+- HMR support — file edits refresh the preview instantly
+- Works with **Vite** and **Next.js**
+- Supports default exports, named exports, and context provider wrappers
 
-## Quick Start
+## Prerequisites
 
-### Vite
+- **Node.js** 18+
+- **React** 18+ with **TypeScript**
+- **Vite** 5+ or **Next.js** 14+
+
+---
+
+## Getting Started with Vite
+
+### Step 1: Install
 
 ```bash
 npm install -D react-compoviewer
 ```
 
-Add the plugin to your `vite.config.ts`:
+### Step 2: Add the plugin to your Vite config
 
 ```ts
+// vite.config.ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { compoviewer } from 'react-compoviewer/vite'
@@ -28,43 +38,99 @@ export default defineConfig({
 })
 ```
 
-Start your dev server and press **Ctrl+Shift+V** to open the viewer.
-
-### Next.js
+### Step 3: Start your dev server
 
 ```bash
-npm install -D react-compoviewer
+npm run dev
 ```
 
-Generate the component registry:
+### Step 4: Open the viewer
+
+Press **Ctrl+Shift+V** (or **Cmd+Shift+V** on Mac) to open the component viewer panel.
+
+That's it. The plugin automatically scans your project for React components, and the overlay will list them all with search, live preview, and prop controls.
+
+---
+
+## Getting Started with Next.js
+
+### Step 1: Install
 
 ```bash
-npx compoviewer --watch
+npm install -D react-compoviewer concurrently
 ```
 
-Add the viewer to your root layout:
+### Step 2: Generate the component registry
+
+Run the scanner to create a `.compoviewer/registry.ts` file:
+
+```bash
+npx compoviewer
+```
+
+This scans your project and generates a registry file that maps all your components.
+
+### Step 3: Add `.compoviewer/` to your `.gitignore`
+
+```bash
+echo '.compoviewer/' >> .gitignore
+```
+
+The registry file is auto-generated and should not be committed.
+
+### Step 4: Create a client component for the viewer
+
+Since the viewer uses browser APIs, it must be a client component. Create a small wrapper:
+
+```tsx
+// src/app/dev-viewer.tsx
+'use client'
+
+import dynamic from 'next/dynamic'
+
+const CompoViewerLazy = dynamic(
+  () =>
+    Promise.all([
+      import('react-compoviewer/next').then((m) => m.CompoViewer),
+      import('../../.compoviewer/registry').then((m) => m),
+    ]).then(([CompoViewer, { registry, config }]) => {
+      return {
+        default: () => <CompoViewer registry={registry} config={config} />,
+      }
+    }),
+  { ssr: false },
+)
+
+export function DevViewer() {
+  if (process.env.NODE_ENV !== 'development') return null
+  return <CompoViewerLazy />
+}
+```
+
+### Step 5: Add the viewer to your root layout
 
 ```tsx
 // src/app/layout.tsx
-'use client'
-import { CompoViewer } from 'react-compoviewer/next'
-import { registry, config } from '../.compoviewer/registry'
+import type { ReactNode } from 'react'
+import { DevViewer } from './dev-viewer'
 
-export default function RootLayout({ children }) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html>
+    <html lang="en">
       <body>
         {children}
-        {process.env.NODE_ENV === 'development' && (
-          <CompoViewer registry={registry} config={config} />
-        )}
+        <DevViewer />
       </body>
     </html>
   )
 }
 ```
 
-Run both the Next.js dev server and the CompoViewer watcher:
+> Note: The `<DevViewer />` component renders nothing in production — it only activates in development mode.
+
+### Step 6: Update your dev script
+
+Run the Next.js dev server and the CompoViewer watcher together:
 
 ```json
 {
@@ -74,19 +140,53 @@ Run both the Next.js dev server and the CompoViewer watcher:
 }
 ```
 
+### Step 7: Start and open
+
+```bash
+npm run dev
+```
+
+Press **Ctrl+Shift+V** (or **Cmd+Shift+V** on Mac) to open the viewer.
+
+### Step 8: Include the generated registry in your tsconfig
+
+Add `.compoviewer/` to your `tsconfig.json` `include` array so TypeScript can resolve the imports:
+
+```json
+{
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".compoviewer/**/*.ts"]
+}
+```
+
+---
+
+## What You'll See
+
+When you press the keyboard shortcut, a dark-themed drawer slides in from the right side of your app:
+
+- **Search bar** at the top — type to fuzzy-search components by name
+- **Component list** — all discovered components with file paths and export type badges
+- **Recent list** — your last 10 viewed components (persisted across reloads)
+- **Live preview** — the selected component rendered with current prop values
+- **Props editor** — auto-generated controls for each prop based on its TypeScript type
+
+---
+
 ## Configuration
 
-Create `compoviewer.config.ts` in your project root:
+Configuration is optional. If you want to customize behavior, create `compoviewer.config.ts` in your project root:
 
 ```ts
 import { defineConfig } from 'react-compoviewer'
 
 export default defineConfig({
-  // Glob patterns for component files
-  include: ['src/**/*.tsx'],
-  exclude: ['**/*.test.*', '**/*.stories.*'],
+  // Glob patterns for files to scan (default shown)
+  include: ['src/**/*.tsx', 'src/**/*.jsx', 'app/**/*.tsx', 'app/**/*.jsx'],
 
-  // Wrap previewed components with context providers
+  // Files to skip
+  exclude: ['**/*.test.*', '**/*.spec.*', '**/*.stories.*', '**/*.d.ts'],
+
+  // Wrap all previewed components with context providers
   wrapper: './src/compoviewer-wrapper.tsx',
 
   // Keyboard shortcut to toggle the viewer
@@ -95,7 +195,7 @@ export default defineConfig({
   // Panel appearance
   panel: {
     position: 'right',    // 'right' | 'left'
-    defaultWidth: 420,
+    defaultWidth: 420,    // pixels
     minWidth: 320,
     maxWidth: 800,
   },
@@ -104,55 +204,110 @@ export default defineConfig({
 
 ### Wrapper Component
 
-If your components need context providers (theme, auth, router, etc.), create a wrapper:
+If your components need context providers (theme, auth, router, internationalization, etc.), create a wrapper component that the viewer will use around every preview:
 
 ```tsx
 // src/compoviewer-wrapper.tsx
 import { ThemeProvider } from './theme'
+import { IntlProvider } from './i18n'
 
 export default function Wrapper({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider>
-      {children}
+      <IntlProvider locale="en">
+        {children}
+      </IntlProvider>
     </ThemeProvider>
   )
 }
 ```
 
+Then reference it in your config:
+
+```ts
+defineConfig({
+  wrapper: './src/compoviewer-wrapper.tsx',
+})
+```
+
+---
+
 ## Prop Controls
 
-CompoViewer auto-generates editing controls based on TypeScript prop types:
+CompoViewer reads your TypeScript prop types and auto-generates the appropriate editing control:
 
-| TypeScript Type | Control |
-|----------------|---------|
-| `string` | Text input |
-| `number` | Number input |
-| `boolean` | Toggle switch |
-| `'a' \| 'b' \| 'c'` | Dropdown select |
-| `ReactNode` | Text input |
-| `() => void` | Trigger button |
-| Objects / complex | JSON textarea |
+| TypeScript Type | Generated Control | Example |
+|----------------|-------------------|---------|
+| `string` | Text input | `title: string` |
+| `number` | Number input with stepper | `count: number` |
+| `boolean` | Toggle switch | `disabled: boolean` |
+| `'a' \| 'b' \| 'c'` | Dropdown select | `variant: 'primary' \| 'secondary'` |
+| `ReactNode` | Text input (renders as text) | `children: ReactNode` |
+| `() => void` | "Trigger" button (logs to console) | `onClick: () => void` |
+| Objects / arrays / complex | JSON textarea | `style: CSSProperties` |
 
-## CLI
+Props marked as `required` show a red `*` indicator. Default values are pre-filled in the controls.
+
+---
+
+## CLI Reference
+
+The CLI is used for Next.js projects (Vite projects don't need it — the plugin handles everything).
 
 ```bash
-# Scan once and generate registry
+# Scan once and generate .compoviewer/registry.ts
 npx compoviewer
 
 # Watch mode — regenerates on file changes
 npx compoviewer --watch
 
-# Custom root directory
+# Custom root directory (e.g., for monorepos)
 npx compoviewer --root=./packages/ui --watch
 ```
 
+---
+
 ## How It Works
 
-1. **Scanner** uses `fast-glob` to find `.tsx`/`.jsx` files in your project
-2. **Parser** uses `es-module-lexer` to detect exports and `react-docgen-typescript` to extract prop types
-3. **Vite plugin** serves the registry as a virtual module and injects the overlay
-4. **Client overlay** renders a searchable drawer with live component preview and prop controls
-5. **HMR** re-scans on file changes and updates the preview without page reload
+1. **Scanner** uses `fast-glob` to find `.tsx` / `.jsx` files matching your include/exclude patterns
+2. **Parser** uses regex-based export detection to find named and default exports (PascalCase only — hooks and utilities are skipped), then `react-docgen-typescript` to extract prop types from TypeScript
+3. **Vite plugin** serves the component registry as a virtual module and injects the overlay script into your HTML
+4. **Client overlay** mounts a React app into a scoped `<div data-compoviewer>` with isolated CSS
+5. **HMR** — when you save a file, the Vite plugin re-scans and sends a WebSocket event; the overlay updates without page reload
+
+For Next.js, steps 3-4 are handled by the CLI (generates a registry file) and the `<CompoViewer />` component (mounts the overlay).
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| **Ctrl+Shift+V** (Win/Linux) or **Cmd+Shift+V** (Mac) | Toggle the viewer panel |
+| **Escape** | Close the viewer |
+| **Arrow Up/Down** | Navigate the component list |
+| **Enter** | Select the focused component |
+
+The toggle shortcut is configurable via `compoviewer.config.ts`.
+
+---
+
+## FAQ
+
+**Q: Does this affect my production bundle?**
+No. The Vite plugin only runs in dev mode. The Next.js `<DevViewer />` component returns `null` in production. Nothing is included in your production build.
+
+**Q: What components does it find?**
+Any PascalCase-named `export function`, `export const`, or `export default function` in files matching your `include` patterns. Hooks (`use*`), utilities, and non-PascalCase exports are skipped.
+
+**Q: What if a component crashes in the preview?**
+An error boundary catches render errors and shows the error message with a "Retry" button. Your app is unaffected.
+
+**Q: Can I resize the panel?**
+Yes — drag the left edge of the panel to resize it. The width is constrained by `minWidth` and `maxWidth` in your config.
+
+**Q: Does it work with CSS Modules / Tailwind / styled-components?**
+Yes. The previewed component runs in the same React tree as your app, so all styles apply normally. The viewer's own UI uses scoped CSS that won't conflict with your styles.
 
 ## License
 

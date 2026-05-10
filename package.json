@@ -64,5 +64,14 @@
     "storybook-alternative",
     "vite-plugin"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "author": "Ahshawky01",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ahshawky01/react-compoviewer.git"
+  },
+  "homepage": "https://github.com/Ahshawky01/react-compoviewer#readme",
+  "bugs": {
+    "url": "https://github.com/Ahshawky01/react-compoviewer/issues"
+  }
 }
